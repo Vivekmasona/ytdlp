@@ -1,11 +1,20 @@
 const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
-const cors = require('cors'); // <--- Yeh line add karein
 
 const app = express();
 app.use(express.json());
-app.use(cors()); // <--- Yeh line add karein (Sabhi domains se request allow karega)
+
+// Custom CORS Header (Bina kisi extra npm package ke sabhi origins allow karega)
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
 
 const PORT = process.env.PORT || 3000;
 
