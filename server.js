@@ -1,5 +1,6 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const app = express();
 app.use(express.json());
@@ -8,30 +9,20 @@ app.get('/get-audio', async (req, res) => {
     const videoUrl = req.query.url;
 
     if (!videoUrl) {
-        return res.status(400).json({ success: false, error: "YouTube URL query parameter is required. Example: /get-audio?url=YOUR_URL" });
+        return res.status(400).json({ success: false, error: "URL parameter required hai" });
     }
 
     let browser;
     try {
-        // Launch Chrome on Render
+        // Chromium configuration
         browser = await puppeteer.launch({
-            headless: "new",
-            executablePath: puppeteer.executablePath(),
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
         });
 
         const page = await browser.newPage();
-        
-        // Navigate to ytdlp.online
         await page.goto('https://ytdlp.online/', { waitUntil: 'networkidle2', timeout: 60000 });
 
         const command = `${videoUrl} -x --audio-format mp3 --get-url`;
@@ -49,11 +40,9 @@ app.get('/get-audio', async (req, res) => {
         // Click Run
         await page.click('#download-btn');
 
-        // Extract googlevideo URL from terminal output
+        // Extract direct url
         let extractedAudioUrl = null;
-        const maxRetries = 25;
-
-        for (let i = 0; i < maxRetries; i++) {
+        for (let i = 0; i < 25; i++) {
             await new Promise(r => setTimeout(r, 1000));
 
             const outputText = await page.evaluate(() => {
@@ -77,12 +66,9 @@ app.get('/get-audio', async (req, res) => {
         await browser.close();
 
         if (extractedAudioUrl) {
-            return res.json({
-                success: true,
-                audio_url: extractedAudioUrl
-            });
+            return res.json({ success: true, audio_url: extractedAudioUrl });
         } else {
-            return res.status(500).json({ success: false, error: "Failed to extract audio link from output." });
+            return res.status(500).json({ success: false, error: "Link extract nahi ho paya" });
         }
 
     } catch (error) {
