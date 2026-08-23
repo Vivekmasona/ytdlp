@@ -1,11 +1,10 @@
 const express = require('express');
 const axios = require('axios');
-const FormData = require('form-data');
 
 const app = express();
 app.use(express.json());
 
-// CORS headers
+// CORS Configuration
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -26,49 +25,44 @@ app.post('/get-audio', async (req, res) => {
     }
 
     try {
-        const formData = new FormData();
-        
-        // Exact format as seen in ytdlp.online HTML response
-        const formattedCommand = `'${videoUrl}' -x --audio-format mp3 --get-url -o "%(title)s.%(ext)s"`;
-        
-        formData.append('command', formattedCommand);
-        formData.append('type', 'stable');
-
-        const response = await axios.post('https://ytdlp.online/run', formData, {
+        // Cobalt API Instance (High-speed & No Bot Blocks)
+        const response = await axios.post('https://cobalt-api.kwippy.com/', {
+            url: videoUrl,
+            downloadMode: 'audio',
+            audioFormat: 'mp3'
+        }, {
             headers: {
-                ...formData.getHeaders(),
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Origin': 'https://ytdlp.online',
-                'Referer': 'https://ytdlp.online/'
-            }
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000
         });
 
-        const outputText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-        
-        // Output text me se googlevideo.com URL filter karna
-        const urlRegex = /(https?:\/\/[^\s"'<]+googlevideo\.com[^\s"'<]+)/g;
-        const match = outputText.match(urlRegex);
-
-        if (match) {
-            return res.json({ success: true, audioUrl: match[0] });
+        if (response.data && response.data.url) {
+            return res.json({ 
+                success: true, 
+                audioUrl: response.data.url 
+            });
         } else {
             return res.status(500).json({ 
-                error: 'Audio link terminal output me nahi mila', 
-                rawOutput: outputText 
+                error: 'Audio URL extract nahi ho paya', 
+                rawResponse: response.data 
             });
         }
+
     } catch (error) {
+        console.error("Error:", error.message);
         return res.status(500).json({ 
-            error: 'ytdlp.online se connect karne me dikkat aayi', 
-            details: error.message 
+            error: 'Audio extraction me dikkat aayi', 
+            details: error.response ? error.response.data : error.message 
         });
     }
 });
 
 app.get('/', (req, res) => {
-    res.send('Server live hai!');
+    res.send('Server running!');
 });
 
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
