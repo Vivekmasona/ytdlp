@@ -5,7 +5,7 @@ const FormData = require('form-data');
 const app = express();
 app.use(express.json());
 
-// Custom CORS Header (Bina kisi extra npm package ke sabhi origins allow karega)
+// CORS headers
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -21,16 +21,17 @@ const PORT = process.env.PORT || 3000;
 app.post('/get-audio', async (req, res) => {
     const { videoUrl } = req.body;
 
-    console.log("=== NEW REQUEST RECEIVED ===");
-    console.log("Target Video URL:", videoUrl);
-
     if (!videoUrl) {
-        return res.status(400).json({ error: 'Video URL is required' });
+        return res.status(400).json({ error: 'Video URL required hai' });
     }
 
     try {
         const formData = new FormData();
-        formData.append('command', `-x --audio-format mp3 --get-url "${videoUrl}"`);
+        
+        // Exact format as seen in ytdlp.online HTML response
+        const formattedCommand = `'${videoUrl}' -x --audio-format mp3 --get-url -o "%(title)s.%(ext)s"`;
+        
+        formData.append('command', formattedCommand);
         formData.append('type', 'stable');
 
         const response = await axios.post('https://ytdlp.online/run', formData, {
@@ -44,27 +45,30 @@ app.post('/get-audio', async (req, res) => {
 
         const outputText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
         
+        // Output text me se googlevideo.com URL filter karna
         const urlRegex = /(https?:\/\/[^\s"'<]+googlevideo\.com[^\s"'<]+)/g;
         const match = outputText.match(urlRegex);
 
         if (match) {
             return res.json({ success: true, audioUrl: match[0] });
         } else {
-            return res.status(500).json({ error: 'Audio URL link me nahi mila', rawResponse: outputText });
+            return res.status(500).json({ 
+                error: 'Audio link terminal output me nahi mila', 
+                rawOutput: outputText 
+            });
         }
     } catch (error) {
-        console.error("Error connecting to ytdlp.online:", error.message);
         return res.status(500).json({ 
-            error: 'Failed to communicate with ytdlp.online', 
+            error: 'ytdlp.online se connect karne me dikkat aayi', 
             details: error.message 
         });
     }
 });
 
 app.get('/', (req, res) => {
-    res.send('Server is running live!');
+    res.send('Server live hai!');
 });
 
 app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
