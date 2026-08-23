@@ -1,11 +1,23 @@
+const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
 
-async function getAudioUrl(youtubeUrl) {
+const app = express();
+app.use(express.json());
+
+// Express Server Port for Render deployment
+const PORT = process.env.PORT || 3000;
+
+app.post('/get-audio', async (req, res) => {
+    const { videoUrl } = req.body;
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: 'Video URL is required' });
+    }
+
     try {
         const formData = new FormData();
-        // Exact form parameters jo website browser se bhejti hai
-        formData.append('command', `-x --audio-format mp3 --get-url "${youtubeUrl}"`);
+        formData.append('command', `-x --audio-format mp3 --get-url "${videoUrl}"`);
         formData.append('type', 'stable');
 
         const response = await axios.post('https://ytdlp.online/run', formData, {
@@ -19,19 +31,28 @@ async function getAudioUrl(youtubeUrl) {
 
         const outputText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
         
-        // Response me se googlevideo.com ka direct link extract karna
+        // Response me se googlevideo.com link match karna
         const urlRegex = /(https?:\/\/[^\s"'<]+googlevideo\.com[^\s"'<]+)/g;
         const match = outputText.match(urlRegex);
 
         if (match) {
-            return match[0];
+            return res.json({ success: true, audioUrl: match[0] });
         } else {
-            throw new Error("Audio URL terminal output me nahi mila");
+            return res.status(500).json({ error: 'Audio URL extract nahi ho paya', rawResponse: outputText });
         }
     } catch (error) {
-        console.error("Error:", error.response ? error.response.data : error.message);
+        return res.status(500).json({ 
+            error: 'Failed to communicate with ytdlp.online', 
+            details: error.response ? error.response.data : error.message 
+        });
     }
-}
+});
 
-// Check karne ke liye:
-getAudioUrl("https://youtu.be/Kx4c66-GjgE").then(url => console.log("Extracted Audio Link:\n", url));
+// Root endpoint test karne ke liye
+app.get('/', (req, res) => {
+    res.send('Server is running live!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+});
