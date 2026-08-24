@@ -1,81 +1,73 @@
 const express = require('express');
-const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium');
+const cors = require('cors');
+const Wappalyzer = require('wappalyzer');
 
 const app = express();
+
+// Middleware
+app.use(cors());
 app.use(express.json());
 
-app.get('/get-audio', async (req, res) => {
-    const videoUrl = req.query.url;
+// Wappalyzer configuration options
+const options = {
+  debug: false,
+  delay: 1000,
+  maxDepth: 1,
+  maxUrls: 1,
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+};
 
-    if (!videoUrl) {
-        return res.status(400).json({ success: false, error: "URL parameter required hai" });
+// API Endpoint to check URL
+app.post('/api/detect', async (req, res) => {
+  let { url } = req.body;
+
+  if (!url) {
+    return res.status(400).json({ status: 'error', message: 'URL required hai' });
+  }
+
+  // URL me http/https nahi hai toh add karein
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+
+  const wappalyzer = new Wappalyzer(options);
+
+  try {
+    await wappalyzer.init();
+    const site = await wappalyzer.open(url);
+    const results = await site.analyze();
+
+    // Data ko categorize karke filter karna
+    const technologies = results.technologies.map(tech => ({
+      name: tech.name,
+      categories: tech.categories.map(c => c.name),
+      confidence: tech.confidence,
+      version: tech.version || null,
+      icon: tech.icon || null
+    }));
+
+    await wappalyzer.destroy();
+
+    return res.json({
+      status: 'success',
+      target: url,
+      total_detected: technologies.length,
+      technologies: technologies
+    });
+
+  } catch (error) {
+    if (wappalyzer) {
+      await wappalyzer.destroy();
     }
-
-    let browser;
-    try {
-        // Chromium configuration
-        browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
-            headless: chromium.headless,
-        });
-
-        const page = await browser.newPage();
-        await page.goto('https://ytdlp.online/', { waitUntil: 'networkidle2', timeout: 60000 });
-
-        const command = `${videoUrl} -x --audio-format mp3 --get-url`;
-
-        // Input field fill
-        await page.waitForSelector('#urlText', { timeout: 15000 });
-        await page.focus('#urlText');
-        
-        await page.keyboard.down('Control');
-        await page.keyboard.press('A');
-        await page.keyboard.up('Control');
-        await page.keyboard.press('Backspace');
-        await page.type('#urlText', command);
-
-        // Click Run
-        await page.click('#download-btn');
-
-        // Extract direct url
-        let extractedAudioUrl = null;
-        for (let i = 0; i < 25; i++) {
-            await new Promise(r => setTimeout(r, 1000));
-
-            const outputText = await page.evaluate(() => {
-                const el = document.querySelector('#output');
-                return el ? el.innerText : '';
-            });
-
-            if (outputText.includes('googlevideo.com/videoplayback')) {
-                const lines = outputText.split('\n');
-                for (let line of lines) {
-                    if (line.includes('googlevideo.com/videoplayback')) {
-                        extractedAudioUrl = line.trim();
-                        break;
-                    }
-                }
-            }
-
-            if (extractedAudioUrl) break;
-        }
-
-        await browser.close();
-
-        if (extractedAudioUrl) {
-            return res.json({ success: true, audio_url: extractedAudioUrl });
-        } else {
-            return res.status(500).json({ success: false, error: "Link extract nahi ho paya" });
-        }
-
-    } catch (error) {
-        if (browser) await browser.close();
-        return res.status(500).json({ success: false, error: error.message });
-    }
+    return res.status(500).json({
+      status: 'error',
+      message: 'Website check karne me dikkat aayi',
+      details: error.message
+    });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
+});
